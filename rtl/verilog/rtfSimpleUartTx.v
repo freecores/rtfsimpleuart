@@ -49,6 +49,7 @@
 	|Data transfer sequencing:			Undefined
 	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	|Clock frequency constraints:		none
+    |      Baud Generates by X16 or X8 CLK_I depends on baud8x pin
 	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	|Supported signal list and			Signal Name		WISHBONE equiv.
 	|cross reference to equivalent		ack_o			ACK_O
@@ -81,15 +82,21 @@ module rtfSimpleUartTx(
 	//--------------------
 	input cs_i,			// chip select
 	input baud16x_ce,	// baud rate clock enable
+    input tri0 baud8x,       // switches to mode baudX8
 	input cts,			// clear to send
 	output txd,			// external serial output
-	output reg empty	// buffer is empty
+	output reg empty, 	// buffer is empty
+    output reg txc          // tx complete flag
 );
 
 reg [9:0] tx_data;	// transmit data working reg (raw)
 reg [7:0] fdo;		// data output
 reg [7:0] cnt;		// baud clock counter
 reg rd;
+
+wire isX8;
+buf(isX8, baud8x);
+reg  modeX8;
 
 assign ack_o = cyc_i & stb_i & cs_i;
 assign txd = tx_data[0];
@@ -105,12 +112,14 @@ always @(posedge clk_i)
 	else if (rd) empty <= 1;
 	end
 
-
+`define CNT_FINISH (8'h9F)
 always @(posedge clk_i)
 	if (rst_i) begin
-		cnt <= 8'h00;
+		cnt <= `CNT_FINISH;
 		rd <= 0;
 		tx_data <= 10'h3FF;
+        txc <= 1'b1;
+        modeX8 <= 1'b0;
 	end
 	else begin
 
@@ -118,19 +127,26 @@ always @(posedge clk_i)
 
 		if (baud16x_ce) begin
 
-			cnt <= cnt + 1;
 			// Load next data ?
-			if (cnt==8'h9F) begin
-				cnt <= 0;
+			if (cnt==`CNT_FINISH) begin
+                modeX8 <= isX8;
 				if (!empty && cts) begin
 					tx_data <= {1'b1,fdo,1'b0};
 					rd <= 1;
+                    cnt <= modeX8;
+                    txc <= 1'b0;
 				end
+                else
+                    txc <= 1'b1;
 			end
 			// Shift the data out. LSB first.
-			else if (cnt[3:0]==4'hF)
-				tx_data <= {1'b1,tx_data[9:1]};
+			else begin
+                cnt[7:1] <= cnt[7:1] + cnt[0];
+                cnt[0] <= ~cnt[0] | (modeX8);
 
+                if (cnt[3:0]==4'hF)
+                    tx_data <= {1'b1,tx_data[9:1]};
+            end
 		end
 	end
 
