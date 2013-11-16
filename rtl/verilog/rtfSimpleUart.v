@@ -1,226 +1,226 @@
-/* ============================================================================
-	2007,2011  Robert Finch
-	robfinch@<remove>sympatico.ca
-
-	rtfSimpleUart.v
-		Basic uart with	baud rate generator based on a harmonic
-	frequency synthesizer.
-
-    This source code is available for evaluation and validation purposes
-    only. This copyright statement and disclaimer must remain present in
-    the file.
-
-
-	NO WARRANTY.
-    THIS Work, IS PROVIDEDED "AS IS" WITH NO WARRANTIES OF ANY KIND, WHETHER
-    EXPRESS OR IMPLIED. The user must assume the entire risk of using the
-    Work.
-
-    IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR ANY
-    INCIDENTAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES WHATSOEVER RELATING TO
-    THE USE OF THIS WORK, OR YOUR RELATIONSHIP WITH THE AUTHOR.
-
-    IN ADDITION, IN NO EVENT DOES THE AUTHOR AUTHORIZE YOU TO USE THE WORK
-    IN APPLICATIONS OR SYSTEMS WHERE THE WORK'S FAILURE TO PERFORM CAN
-    REASONABLY BE EXPECTED TO RESULT IN A SIGNIFICANT PHYSICAL INJURY, OR IN
-    LOSS OF LIFE. ANY SUCH USE BY YOU IS ENTIRELY AT YOUR OWN RISK, AND YOU
-    AGREE TO HOLD THE AUTHOR AND CONTRIBUTORS HARMLESS FROM ANY CLAIMS OR
-    LOSSES RELATING TO SUCH UNAUTHORIZED USE.
-
-
-  	To use:
- 
-  	Set the pClkFreq parameter to the frequency of the system
-  	clock (clk_i). This can be done when the core is instanced.
- 
-    1) set the baud rate value in the clock multiplier
-    registers (CM1,2,3). A default multiplier value may
-    be specified using the pClkMul parameter, so it
-    doesn't have to be programmed at run time. (Note the
-    pBaud parameter may also be set, but it doesn't work
-    in all cases due to arithmetic limitations).
-    2) enable communication by activating the rts, and
-    dtr signals in the modem control register. These
-    signals are defaulted to be active on reset, so they
-    may not need to be set. The pRts and pDtr parameters
-    may be used to change the default setting.
-    3) use interrupts or poll the status register to
-    determine when to transmit or receive a byte of data
-    4) read / write the transmit / recieve data buffer
-    for communication.
-
-    Notes:
-    	This core only supports a single transmission /
-    reception format: 1 start, 8 data, and 1 stop bit (no
-    parity).	
-    	The baud rate generator uses a 24 bit harmonic
-    frequency synthesizer. Compute the multiplier value
-    as if a 32 bit value was needed, then take the upper
-    24 bits of the value. (The number of significant bits
-    in the value determine the minimum frequency
-    resolution or the precision of the value).
-
-    				baud rate * 16
-    	value = -----------------------
-    			(clock frequency / 2^32)
-  
-  		eg			38400 * 16
-  		value = -----------------------
-				(28.63636MHz / 2^32)
-				
-				= 92149557.65
-				= 057E1736 (hex)
-				
-				
-		taking the upper 24 bits
-				top 24 = 057E17
-						= 359959
-				
-		so the value needed to be programmed into the register
-	for 38.4k baud is 57E17 (hex)
-		eg 	CM0 = 0 (not used)
-			CM1 = 17 hex
-			CM2 = 7E hex
-			CM3 = 05 hex
-
-
-	Register Description
-
-	reg
-	0	read / write (RW)
-		TRB - transmit / receive buffer
-		transmit / receive buffer
-		write 	- write to transmit buffer
-		read	- read from receive buffer
-
-	1	read only (RO)
-		LS	- line status register
-		bit 0 = receiver not empty, this bit is set if there is
-				any data available in the receiver fifo
-		bit 1 = overrun, this bit is set if receiver overrun occurs
-		bit 3 = framing error, this bit is set if there was a
-				framing error with the current byte in the receiver
-				buffer.
-		bit 5 = transmitter not full, this bit is set if the transmitter
-				can accept more data
-		bit 6 = transmitter empty, this bit is set if the transmitter is
-				completely empty
-
-	2	MS	- modem status register (RO)
-		writing to the modem status register clears the change
-		indicators, which should clear a modem status interrupt
-		bit 3 = change on dcd signal
-		bit 4 = cts signal level
-		bit 5 = dsr signal level
-		bit 6 = ri signal level
-		bit 7 = dcd signal level
-
-	3	IS	- interrupt status register (RO)
-		bit 0-4 = mailbox number
-		bit 0,1	= 00
-		bit 2-4	= encoded interrupt value
-		bit 5-6 = not used, reserved
-		bit 7 = 1 = interrupt pending, 0 = no interrupt
-
-	4	IE	- interrupt enable register (RW)
-		bit 0 = receive interrupt (data present)
-		bit 1 = transmit interrupt (data empty)
-		bit 3 = modem status (dcd) register change
-		bit 5-7 = unused, reserved
-
-	5	FF	- frame format register		(RW)
-		this register doesn't do anything in the simpleUart
-		but is reserved for compatiblity with the more
-		advanced uart
-
-	6	MC	- modem control register (RW)
-		bit 0 = dtr signal level output
-		bit 1 = rts signal level output
-
-	7	- control register
-		bit 0 = hardware flow control,
-			when this bit is set, the transmitter output is
-			controlled by the cts signal line automatically
-
-
-		* Clock multiplier steps the 16xbaud clock frequency
-		in increments of 1/2^32 of the clk_i input using a
-		harmonic frequency synthesizer
-		eg. to get a 9600 baud 16x clock (153.6 kHz) with a
-		27.175 MHz clock input,
-		value  = upper24(9600 * 16  / (27.175MHz / 2^32))
-		Higher frequency baud rates will exhibit more jitter
-		on the 16x clock, but this will mostly be masked by the 
-		16x clock factor.
-
-	8	CM0	- Clock Multiplier byte 0 (RW)
-		this is the least significant byte
-		of the clock multiplier value
-		this register is not used unless the clock
-		multiplier is set to contain 32 bit values
-
-	9	CM1 - Clock Multiplier byte 1	(RW)
-		this is the third most significant byte
-		of the clock multiplier value
-		this register is not used unless the clock
-		multiplier is set to contain 24 or 32 bit values
-
-	10	CM2 - Clock Multiplier byte 2	(RW)
-		this is the second most significant byte of the clock
-		multiplier value
-
-	11	CM3	- Clock Multiplier byte 3 	(RW)
-		this is the most significant byte of the multiplier value
-
-	12	FC	- Fifo control register		(RW)
-		this register doesnt' do anything in the simpleUart
-		but is reserved for compatibility with the more
-		advanced uart
-		
-	13-14	reserved registers
-
-	15	SPR	- scratch pad register (RW)
-
-
-   	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	|WISHBONE Datasheet
-	|WISHBONE SoC Architecture Specification, Revision B.3
-	|
-	|Description:						Specifications:
-	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	|General Description:				simple UART core
-	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	|Supported Cycles:					SLAVE,READ/WRITE
-	|									SLAVE,BLOCK READ/WRITE
-	|									SLAVE,RMW
-	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	|Data port, size:					8 bit
-	|Data port, granularity:			8 bit
-	|Data port, maximum operand size:	8 bit
-	|Data transfer ordering:			Undefined
-	|Data transfer sequencing:			Undefined
-	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	|Clock frequency constraints:		none
-	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	|Supported signal list and			Signal Name		WISHBONE equiv.
-	|cross reference to equivalent		ack_o			ACK_O
-	|WISHBONE signals					adr_i[3:0]		ADR_I()
-	|									clk_i			CLK_I
-	|                                   rst_i           RST_I()
-	|									dat_i(7:0)		DAT_I()
-	|									dat_o(7:0)		DAT_O()
-	|									cyc_i			CYC_I
-	|									stb_i			STB_I
-	|									we_i			WE_I
-	|
-	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	|Special requirements:
-	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-
-	Ref. Spartan3 -4
-	117 LUTs / 87 slices / 133 MHz
-============================================================================ */
+// ============================================================================
+//	(C) 2007,2011,2013  Robert Finch
+//  All rights reserved.
+//	robfinch@<remove>finitron.ca
+//
+//	rtfSimpleUart.v
+//		Basic uart with	baud rate generator based on a harmonic
+//	frequency synthesizer.
+//
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the <organization> nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+//
+//  	To use:
+// 
+//  	Set the pClkFreq parameter to the frequency of the system
+//  	clock (clk_i). This can be done when the core is instanced.
+// 
+//    1) set the baud rate value in the clock multiplier
+//    registers (CM1,2,3). A default multiplier value may
+//    be specified using the pClkMul parameter, so it
+//    doesn't have to be programmed at run time. (Note the
+//    pBaud parameter may also be set, but it doesn't work
+//    in all cases due to arithmetic limitations).
+//    2) enable communication by activating the rts, and
+//    dtr signals in the modem control register. These
+//    signals are defaulted to be active on reset, so they
+//    may not need to be set. The pRts and pDtr parameters
+//    may be used to change the default setting.
+//    3) use interrupts or poll the status register to
+//    determine when to transmit or receive a byte of data
+//    4) read / write the transmit / recieve data buffer
+//    for communication.
+//
+//    Notes:
+//    	This core only supports a single transmission /
+//    reception format: 1 start, 8 data, and 1 stop bit (no
+//    parity).	
+//    	The baud rate generator uses a 24 bit harmonic
+//    frequency synthesizer. Compute the multiplier value
+//    as if a 32 bit value was needed, then take the upper
+//    24 bits of the value. (The number of significant bits
+//    in the value determine the minimum frequency
+//    resolution or the precision of the value).
+//
+//    				baud rate * 16
+//    	value = -----------------------
+//    			(clock frequency / 2^32)
+//  
+//  		eg			38400 * 16
+//  		value = -----------------------
+//				(28.63636MHz / 2^32)
+//				
+//				= 92149557.65
+//				= 057E1736 (hex)
+//				
+//				
+//		taking the upper 24 bits
+//				top 24 = 057E17
+//						= 359959
+//				
+//		so the value needed to be programmed into the register
+//	for 38.4k baud is 57E17 (hex)
+//		eg 	CM0 = 0 (not used)
+//			CM1 = 17 hex
+//			CM2 = 7E hex
+//			CM3 = 05 hex
+//
+//
+//	Register Description
+//
+//	reg
+//	0	read / write (RW)
+//		TRB - transmit / receive buffer
+//		transmit / receive buffer
+//		write 	- write to transmit buffer
+//		read	- read from receive buffer
+//
+//	1	read only (RO)
+//		LS	- line status register
+//		bit 0 = receiver not empty, this bit is set if there is
+//				any data available in the receiver fifo
+//		bit 1 = overrun, this bit is set if receiver overrun occurs
+//		bit 3 = framing error, this bit is set if there was a
+//				framing error with the current byte in the receiver
+//				buffer.
+//		bit 5 = transmitter not full, this bit is set if the transmitter
+//				can accept more data
+//		bit 6 = transmitter empty, this bit is set if the transmitter is
+//				completely empty
+//
+//	2	MS	- modem status register (RO)
+//		writing to the modem status register clears the change
+//		indicators, which should clear a modem status interrupt
+//		bit 3 = change on dcd signal
+//		bit 4 = cts signal level
+//		bit 5 = dsr signal level
+//		bit 6 = ri signal level
+//		bit 7 = dcd signal level
+//
+//	3	IS	- interrupt status register (RO)
+//		bit 0-4 = mailbox number
+//		bit 0,1	= 00
+//		bit 2-4	= encoded interrupt value
+//		bit 5-6 = not used, reserved
+//		bit 7 = 1 = interrupt pending, 0 = no interrupt
+//
+//	4	IE	- interrupt enable register (RW)
+//		bit 0 = receive interrupt (data present)
+//		bit 1 = transmit interrupt (data empty)
+//		bit 3 = modem status (dcd) register change
+//		bit 5-7 = unused, reserved
+//
+//	5	FF	- frame format register		(RW)
+//		this register doesn't do anything in the simpleUart
+//		but is reserved for compatiblity with the more
+//		advanced uart
+//
+//	6	MC	- modem control register (RW)
+//		bit 0 = dtr signal level output
+//		bit 1 = rts signal level output
+//
+//	7	- control register
+//		bit 0 = hardware flow control,
+//			when this bit is set, the transmitter output is
+//			controlled by the cts signal line automatically
+//
+//
+//		* Clock multiplier steps the 16xbaud clock frequency
+//		in increments of 1/2^32 of the clk_i input using a
+//		harmonic frequency synthesizer
+//		eg. to get a 9600 baud 16x clock (153.6 kHz) with a
+//		27.175 MHz clock input,
+//		value  = upper24(9600 * 16  / (27.175MHz / 2^32))
+//		Higher frequency baud rates will exhibit more jitter
+//		on the 16x clock, but this will mostly be masked by the 
+//		16x clock factor.
+//
+//	8	CM0	- Clock Multiplier byte 0 (RW)
+//		this is the least significant byte
+//		of the clock multiplier value
+//		this register is not used unless the clock
+//		multiplier is set to contain 32 bit values
+//
+//	9	CM1 - Clock Multiplier byte 1	(RW)
+//		this is the third most significant byte
+//		of the clock multiplier value
+//		this register is not used unless the clock
+//		multiplier is set to contain 24 or 32 bit values
+//
+//	10	CM2 - Clock Multiplier byte 2	(RW)
+//		this is the second most significant byte of the clock
+//		multiplier value
+//
+//	11	CM3	- Clock Multiplier byte 3 	(RW)
+//		this is the most significant byte of the multiplier value
+//
+//	12	FC	- Fifo control register		(RW)
+//		this register doesnt' do anything in the simpleUart
+//		but is reserved for compatibility with the more
+//		advanced uart
+//		
+//	13-14	reserved registers
+//
+//	15	SPR	- scratch pad register (RW)
+//
+//
+//   	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//	|WISHBONE Datasheet
+//	|WISHBONE SoC Architecture Specification, Revision B.3
+//	|
+//	|Description:						Specifications:
+//	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//	|General Description:				simple UART core
+//	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//	|Supported Cycles:					SLAVE,READ/WRITE
+//	|									SLAVE,BLOCK READ/WRITE
+//	|									SLAVE,RMW
+//	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//	|Data port, size:					8 bit
+//	|Data port, granularity:			8 bit
+//	|Data port, maximum operand size:	8 bit
+//	|Data transfer ordering:			Undefined
+//	|Data transfer sequencing:			Undefined
+//	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//	|Clock frequency constraints:		none
+//	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//	|Supported signal list and			Signal Name		WISHBONE equiv.
+//	|cross reference to equivalent		ack_o			ACK_O
+//	|WISHBONE signals					adr_i[3:0]		ADR_I()
+//	|									clk_i			CLK_I
+//	|                                   rst_i           RST_I()
+//	|									dat_i(7:0)		DAT_I()
+//	|									dat_o(7:0)		DAT_O()
+//	|									cyc_i			CYC_I
+//	|									stb_i			STB_I
+//	|									we_i			WE_I
+//	|
+//	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//	|Special requirements:
+//	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//
+//=============================================================================
 
 `define UART_TRB    4'd0    // transmit/receive buffer
 `define UART_LS     4'd1    // line status register

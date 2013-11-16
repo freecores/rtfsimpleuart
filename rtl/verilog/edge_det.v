@@ -1,41 +1,40 @@
-/* ============================================================================
-	2007  Robert Finch
-	rob@birdcomputer.ca
-
-	edge_det.v
-
-    This source code is available for evaluation and validation purposes
-    only. This copyright statement and disclaimer must remain present in
-    the file.
-
-
-	NO WARRANTY.
-    THIS Work, IS PROVIDEDED "AS IS" WITH NO WARRANTIES OF ANY KIND, WHETHER
-    EXPRESS OR IMPLIED. The user must assume the entire risk of using the
-    Work.
-
-    IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR ANY
-    INCIDENTAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES WHATSOEVER RELATING TO
-    THE USE OF THIS WORK, OR YOUR RELATIONSHIP WITH THE AUTHOR.
-
-    IN ADDITION, IN NO EVENT DOES THE AUTHOR AUTHORIZE YOU TO USE THE WORK
-    IN APPLICATIONS OR SYSTEMS WHERE THE WORK'S FAILURE TO PERFORM CAN
-    REASONABLY BE EXPECTED TO RESULT IN A SIGNIFICANT PHYSICAL INJURY, OR IN
-    LOSS OF LIFE. ANY SUCH USE BY YOU IS ENTIRELY AT YOUR OWN RISK, AND YOU
-    AGREE TO HOLD THE AUTHOR AND CONTRIBUTORS HARMLESS FROM ANY CLAIMS OR
-    LOSSES RELATING TO SUCH UNAUTHORIZED USE.
-
-
-    Notes:
-
-	Edge detector
-	This little core detects an edge (positive, negative, and
-	either) in the input signal.
-
-   	Verilog 1995
-	Webpack 9.2 xc3S1000-4ft256
-	3 LUTs / 2 slices / 9.1ns
-============================================================================ */
+// ============================================================================
+//	(C) 2007,2013  Robert Finch
+//  All rights reserved.
+//	robfinch@<remove>finitron.ca
+//
+//	edge_det.v
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the <organization> nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+//    Notes:
+//
+//	Edge detector
+//	This little core detects an edge (positive, negative, and
+//	either) in the input signal.
+//
+//   	Verilog 1995
+// ============================================================================
 
 module edge_det(rst, clk, ce, i, pe, ne, ee);
 input rst;		// reset
